@@ -5,6 +5,8 @@ from.forms import CreateUserForm
 from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout  #AUTHENTICATION FROM DJANGO
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.models import Group
+from .decorators import unauthenticated_user, allowed_users
 
 
 questions = [
@@ -22,6 +24,7 @@ questions = [
     }
 ]
 @login_required(login_url='login')   #DECORATOR PROTECTS PAGES FROM UNAUTHORISED USERS
+@allowed_users(allowed_roles='admin') #PROTECTS PAGES BASED ON USER ROLES
 def home(request):
     context = {
         'questions': questions
@@ -29,38 +32,35 @@ def home(request):
 
     return render(request, 'forum/home.html', context)
 
-
+@unauthenticated_user
 def register(request):
-    if request.user.is_authenticated:   #ENSURE LOGGED IN USERS CANT ACCESS THIS AREA
-        return redirect('forum-home')
-    else:
-        form = CreateUserForm  #GENERATING AUTO GENERATED FORM WE ADD TO THIS LATER
-        if request.method == "POST":
-            form = CreateUserForm(request.POST)
-            if form.is_valid():
-                form.save()
-                user = form.cleaned_data.get('username')
-                messages.success(request, 'Account' + user + 'created')
-                return redirect('login')
+    form = CreateUserForm  #GENERATING AUTO GENERATED FORM WE ADD TO THIS LATER
+    if request.method == "POST":
+        form = CreateUserForm(request.POST)
+        if form.is_valid():
+            user = form.save()
+            username = form.cleaned_data.get('username')
+            group = Group.objects.get(name='users')
+            user.groups.add(group)
+            messages.success(request, 'Account ' + username + ' created')
+            return redirect('login')
     context = { 'form':form }
     return render(request, 'forum/register.html', context)
 
 
+@unauthenticated_user
 def loginpage(request):
-    if request.user.is_authenticated:   #ENSURE LOGGED IN USERS CANT ACCESS THIS AREA
-        return redirect('forum-home')
-    else:
-        if request.method == "POST":
-            username = request.POST.get('username')
-            password = request.POST.get('password')
+    if request.method == "POST":
+        username = request.POST.get('username')
+        password = request.POST.get('password')
 
-            user = authenticate(request, username=username, password=password)   #AUTHENTICATING USER USING AUTHENTICATE LIB (CHECKS AGAINST DATABASE VALUES)
-            
-            if user is not None:
-                login(request, user)
-                return redirect('profile')
-            else:
-                messages.info(request, 'username or password is incorrect') # WE DONT EXPLICITLY SAY WHICH IS INCORRECT SO HACKERS DONT HAVE ANY EXTRA INFORMATION
+        user = authenticate(request, username=username, password=password)   #AUTHENTICATING USER USING AUTHENTICATE LIB (CHECKS AGAINST DATABASE VALUES)
+        
+        if user is not None:
+            login(request, user)
+            return redirect('profile')
+        else:
+            messages.info(request, 'username or password is incorrect') # WE DONT EXPLICITLY SAY WHICH IS INCORRECT SO HACKERS DONT HAVE ANY EXTRA INFORMATION
 
     context = {}
     return render(request, 'forum/login.html', context)
